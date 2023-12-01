@@ -1,0 +1,11 @@
+linux       # too big
+kino        # FTBFS, rm pending
+libdjconsole        # FTBFS since 2021
+bluez       #1052983
+openfpgaloader #1037802
+e2fsprogs #1053111
+lvm2 #1052666
+bolt #1052349
+docker.io # ftbfs is unshare
+system-config-printer #1054795
+ubertooth #1054741

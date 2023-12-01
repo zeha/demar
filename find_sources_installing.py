@@ -7,12 +7,6 @@ from debian import deb822
 ARCHS = ["all", "arm64", "amd64"]
 COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 
-IGNORE_SRC_PKGS = [
-    "linux",  # too big
-    "kino",  # FTBFS, rm pending
-    "libdjconsole",  # FTBFS since 2021
-]
-
 
 def find_bin_pkgs_with_paths(contents: pathlib.Path) -> set[str]:
     bin_pkgs = set()
