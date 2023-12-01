@@ -38,7 +38,9 @@ def main():
     max_parallel = int(multiprocessing.cpu_count() * 1.6)
     with multiprocessing.Pool(max_parallel) as pool:
         results = pool.map(
-            do_build_one, [(srcpkg, str(build_dir), str(buildlog_dir), extra_pkgs) for srcpkg in srcpkgs]
+            do_build_one,
+            [(srcpkg, str(build_dir), str(buildlog_dir), extra_pkgs) for srcpkg in srcpkgs],
+            1,
         )
 
     with (build_dir / "results.yaml").open("w") as fp:
@@ -55,7 +57,7 @@ def do_build_one(workitem):
 def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs):
     build_dir.cwd()
 
-    print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...")
+    print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...", f"(worker={os.getpid()})")
     args = [
         "sbuild",
         "--dist=unstable",
