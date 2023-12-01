@@ -1,53 +1,75 @@
-# sbuild --arch-all --dist=unstable --nolog munge_0.5.15-3 --extra-package=libnss-myhostname-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libnss-myhostname_255~rc3-2.1_amd64.deb --extra-package=libnss-mymachines-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libnss-mymachines_255~rc3-2.1_amd64.deb --extra-package=libnss-resolve-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libnss-resolve_255~rc3-2.1_amd64.deb --extra-package=libnss-systemd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libnss-systemd_255~rc3-2.1_amd64.deb --extra-package=libpam-systemd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libpam-systemd_255~rc3-2.1_amd64.deb --extra-package=libsystemd-dev_255~rc3-2.1_amd64.deb --extra-package=libsystemd-shared-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libsystemd-shared_255~rc3-2.1_amd64.deb --extra-package=libsystemd0-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libsystemd0_255~rc3-2.1_amd64.deb --extra-package=libudev-dev_255~rc3-2.1_amd64.deb --extra-package=libudev1-dbgsym_255~rc3-2.1_amd64.deb --extra-package=libudev1_255~rc3-2.1_amd64.deb --extra-package=systemd-boot-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-boot-efi_255~rc3-2.1_amd64.deb --extra-package=systemd-boot_255~rc3-2.1_amd64.deb --extra-package=systemd-container-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-container_255~rc3-2.1_amd64.deb --extra-package=systemd-coredump-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-coredump_255~rc3-2.1_amd64.deb --extra-package=systemd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-dev_255~rc3-2.1_all.deb --extra-package=systemd-homed-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-homed_255~rc3-2.1_amd64.deb --extra-package=systemd-journal-remote-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-journal-remote_255~rc3-2.1_amd64.deb --extra-package=systemd-oomd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-oomd_255~rc3-2.1_amd64.deb --extra-package=systemd-resolved-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-resolved_255~rc3-2.1_amd64.deb --extra-package=systemd-standalone-sysusers-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-standalone-sysusers_255~rc3-2.1_amd64.deb --extra-package=systemd-standalone-tmpfiles-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-standalone-tmpfiles_255~rc3-2.1_amd64.deb --extra-package=systemd-sysv_255~rc3-2.1_amd64.deb --extra-package=systemd-tests-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-tests_255~rc3-2.1_amd64.deb --extra-package=systemd-timesyncd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-timesyncd_255~rc3-2.1_amd64.deb --extra-package=systemd-userdbd-dbgsym_255~rc3-2.1_amd64.deb --extra-package=systemd-userdbd_255~rc3-2.1_amd64.deb --extra-package=systemd_255~rc3-2.1_amd64.deb --extra-package=udev-dbgsym_255~rc3-2.1_amd64.deb --extra-package=udev_255~rc3-2.1_amd64.deb
-
+#!/usr/bin/env python3
 import pathlib
 import subprocess
 import datetime
 import sys
+from debian import deb822
+import multiprocessing
+import yaml
 
-pkg_list_file = sys.argv[1]
-changes_file = pathlib.Path(sys.argv[2]).absolute()
-buildlog_dir = pathlib.Path(f"./buildlogs-{datetime.datetime.now().isoformat().replace(':', '-')}").absolute()
-print("Writing buildlogs to", buildlog_dir)
-buildlog_dir.mkdir()
 
-with open(pkg_list_file, 'r') as fp:
-    srcpkgs = fp.readlines()
-    srcpkgs = [l.strip() for l in srcpkgs]
+def main():
+    pkg_list_file = sys.argv[1]
+    changes_file = pathlib.Path(sys.argv[2]).absolute()
+    build_dir = pathlib.Path(f"./build-{datetime.datetime.now().isoformat().replace(':', '-')}").absolute()
+    buildlog_dir = (build_dir / "buildlogs").absolute()
+    print("Writing build files to", buildlog_dir)
+    build_dir.mkdir()
+    print("Writing buildlogs to", buildlog_dir)
+    buildlog_dir.mkdir()
 
-# Files:
-# f0f6b108ae3ce47dda7cd839075337c3 345020 debug optional libnss-myhostname-dbgsym_255~rc3-2.1_amd64.deb
-# 23688c455a80d9c1ffe1dc2c0eefaf33 95496 admin optional libnss-myhostname_255~rc3-2.1_amd64.deb
+    with open(pkg_list_file, "r") as fp:
+        srcpkgs = fp.readlines()
+        srcpkgs = [l.strip() for l in srcpkgs]
 
-extra_pkgs = []
-with open(changes_file, 'r') as fp:
-    found = False
-    for line in fp.readlines():
-        if not found:
-            if line.startswith('Files:'):
-                found = True
-        else:
-            if line.startswith(' '):
-                d = line.split()
-                extra_pkgs.append(f"{changes_file.parent}/{d[4]}")
-            else:
-                found = False
+    # Files:
+    # f0f6b108ae3ce47dda7cd839075337c3 345020 debug optional libnss-myhostname-dbgsym_255~rc3-2.1_amd64.deb
+    # 23688c455a80d9c1ffe1dc2c0eefaf33 95496 admin optional libnss-myhostname_255~rc3-2.1_amd64.deb
 
-for src_index, srcpkg in enumerate(srcpkgs):
-    print("Building", srcpkg, f"{src_index}/{len(srcpkgs)}", "...")
+    extra_pkgs = []
+    with open(changes_file, "r") as fp:
+        dsc = deb822.Dsc(fp)
+        for file_meta in dsc["Files"]:
+            extra_pkgs.append(f"{changes_file.parent}/{file_meta['name']}")
+
+    def dowork(srcpkg):
+        return build_one(srcpkg, "", build_dir, buildlog_dir, extra_pkgs)
+
+    max_parallel = int(multiprocessing.cpu_count() / 2) - 2
+    with multiprocessing.Pool(max_parallel) as pool:
+        results = pool.map(dowork, srcpkgs)
+
+    with (build_dir / "results.yaml").open("w") as fp:
+        yaml.safe_dump_all(results, fp)
+        # for src_index, srcpkg in enumerate(srcpkgs):
+        #    progress_info = f"{src_index}/{len(srcpkgs)}"
+
+
+def build_one(srcpkg, progress_info, build_dir, buildlog_dir, extra_pkgs):
+    build_dir.cwd()
+
+    print("Building", srcpkg, progress_info, "...")
     args = [
         "sbuild",
         "--dist=unstable",
-        "-j4",
+        "-j2",
         "--nolog",
+        "--no-run-piuparts",
+        "--no-run-lintian",
+        f"--build-dir={build_dir}",
         srcpkg,
     ]
     for extra_pkg in extra_pkgs:
         args.append(f"--extra-package={extra_pkg}")
-    print("   ", args)
+    #    print("   ", args)
     buildlog_file = buildlog_dir / srcpkg
     with buildlog_file.open("w") as out_fp:
         result = subprocess.run(args, stdout=out_fp)
     if result.returncode != 0:
         print("FAIL", srcpkg)
 
+    return {srcpkg: {"package": srcpkg, "result": result.returncode}}
+
+
+if __name__ == "__main__":
+    main()
