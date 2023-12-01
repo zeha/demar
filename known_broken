@@ -9,3 +9,4 @@ bolt #1052349
 docker.io # ftbfs is unshare
 system-config-printer #1054795
 ubertooth #1054741
+gpsd # needs makedev
