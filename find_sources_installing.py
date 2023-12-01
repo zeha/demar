@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import pathlib
 import gzip
-from debian import deb822
+import pathlib
 
+from debian import deb822
 
 ARCHS = ["all", "arm64", "amd64"]
 COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]

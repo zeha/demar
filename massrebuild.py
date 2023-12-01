@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+import datetime
+import multiprocessing
+import os
 import pathlib
 import subprocess
-import datetime
 import sys
-from debian import deb822
-import multiprocessing
+
 import yaml
+from debian import deb822
 
 
 def main():
