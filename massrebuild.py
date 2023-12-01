@@ -28,16 +28,16 @@ def main():
 
     extra_pkgs = []
     with open(changes_file, "r") as fp:
-        dsc = deb822.Dsc(fp)
-        for file_meta in dsc["Files"]:
+        changes = deb822.Changes(fp)
+        for file_meta in changes["Files"]:
             extra_pkgs.append(f"{changes_file.parent}/{file_meta['name']}")
+    print("Adding extra packages:", " ".join(extra_pkgs))
 
-    def dowork(srcpkg):
-        return build_one(srcpkg, "", build_dir, buildlog_dir, extra_pkgs)
-
-    max_parallel = int(multiprocessing.cpu_count() / 2) - 2
+    max_parallel = int(multiprocessing.cpu_count() * 1.6)
     with multiprocessing.Pool(max_parallel) as pool:
-        results = pool.map(dowork, srcpkgs)
+        results = pool.map(
+            do_build_one, [(srcpkg, str(build_dir), str(buildlog_dir), extra_pkgs) for srcpkg in srcpkgs]
+        )
 
     with (build_dir / "results.yaml").open("w") as fp:
         yaml.safe_dump_all(results, fp)
@@ -45,14 +45,18 @@ def main():
         #    progress_info = f"{src_index}/{len(srcpkgs)}"
 
 
-def build_one(srcpkg, progress_info, build_dir, buildlog_dir, extra_pkgs):
+def do_build_one(workitem):
+    srcpkg, build_dir, buildlog_dir, extra_pkgs = workitem
+    return build_one(srcpkg, pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs)
+
+
+def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs):
     build_dir.cwd()
 
-    print("Building", srcpkg, progress_info, "...")
+    print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...")
     args = [
         "sbuild",
         "--dist=unstable",
-        "-j2",
         "--nolog",
         "--no-run-piuparts",
         "--no-run-lintian",
