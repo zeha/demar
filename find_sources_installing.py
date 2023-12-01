@@ -10,6 +10,7 @@ COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 IGNORE_SRC_PKGS = [
     "linux",  # too big
     "kino",  # FTBFS, rm pending
+    "libdjconsole",  # FTBFS since 2021
 ]
 
 
