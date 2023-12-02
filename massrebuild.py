@@ -92,7 +92,10 @@ def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -
         print("Skipping", srcpkg, "(buildinfo already exists)")
         return {"status": "already_built"}
 
-    if broken_detail := known_broken.get(srcpkg.split("_")[0]):
+    srcpkg_name = srcpkg
+    if "_" in srcpkg_name:
+        srcpkg_name = srcpkg_name.split("_")[0]
+    if broken_detail := known_broken.get(srcpkg_name):
         print("Skipping", srcpkg, f"(known broken: {broken_detail})")
         return {"status": "known_broken", "detail": broken_detail}
 
