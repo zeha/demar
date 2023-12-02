@@ -122,6 +122,8 @@ def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -
         result["detail"] = {"returncode": proc.returncode}
         result["stderr"] = proc.stderr.decode().strip()
         print("FAIL", srcpkg, f"(sbuild exited with {proc.returncode})", proc.stderr.decode().strip())
+    else:
+        result["status"] = "built"
 
     return result
 
