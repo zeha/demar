@@ -88,13 +88,21 @@ def do_build_one(workitem) -> dict:
 def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -> dict:
     build_dir.cwd()
 
-    if (build_dir / f"{srcpkg}_{MY_ARCHITECTURE}.buildinfo").exists():
+    if "_" in srcpkg:
+        srcpkg_name = srcpkg.split("_")[0]
+        srcpkg_version = srcpkg.split("_", 1)[1]
+    else:
+        srcpkg_name = srcpkg
+        srcpkg_version = ""
+
+    binpkg_version = srcpkg_version
+    if ":" in binpkg_version:
+        binpkg_version = binpkg_version.split(":", 1)[1]
+
+    if (build_dir / f"{srcpkg_name}_{binpkg_version}_{MY_ARCHITECTURE}.buildinfo").exists():
         print("Skipping", srcpkg, "(buildinfo already exists)")
         return {"status": "already_built"}
 
-    srcpkg_name = srcpkg
-    if "_" in srcpkg_name:
-        srcpkg_name = srcpkg_name.split("_")[0]
     if broken_detail := known_broken.get(srcpkg_name):
         print("Skipping", srcpkg, f"(known broken: {broken_detail})")
         return {"status": "known_broken", "detail": broken_detail}
