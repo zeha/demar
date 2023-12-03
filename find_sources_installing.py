@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import gzip
 import pathlib
 
@@ -7,17 +8,28 @@ from debian import deb822
 ARCHS = ["all", "arm64", "amd64"]
 COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 
+FINDERS = {
+    "udev": lambda path: path.startswith("lib/udev/"),
+    "systemd": lambda path: path.startswith("lib/systemd/"),
+}
 
-def find_bin_pkgs_with_paths(contents: pathlib.Path) -> set[str]:
+
+def find_bin_pkgs_with_paths(contents: pathlib.Path, finder) -> set[str]:
     bin_pkgs = set()
     with gzip.open(contents, "rt") as fp:
         for line in fp:
             path, packages = line.strip().split(maxsplit=1)
-            if path.startswith("lib/udev/rules"):
+            if finder(path):
                 for package in packages.split(","):
                     bin_pkgs.add(package.split("/")[1])
 
     return bin_pkgs
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Find sources installing paths into binaries")
+    parser.add_argument("finder", choices=FINDERS.keys())
+    return parser.parse_args()
 
 
 def main():
@@ -25,10 +37,13 @@ def main():
     bin_pkgs = set()
     source_pkgs = set()
 
+    args = parse_args()
+    finder = FINDERS[args.finder]
+
     for component in COMPONENTS:
         for arch in ARCHS:
             bin_pkgs.update(
-                find_bin_pkgs_with_paths(pathlib.Path(f"{mirror}/dists/sid/{component}/Contents-{arch}.gz"))
+                find_bin_pkgs_with_paths(pathlib.Path(f"{mirror}/dists/sid/{component}/Contents-{arch}.gz"), finder)
             )
 
     for component in COMPONENTS:
