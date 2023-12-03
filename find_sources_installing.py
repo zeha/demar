@@ -21,7 +21,7 @@ def find_bin_pkgs_with_paths(contents: pathlib.Path, finder) -> set[str]:
             path, packages = line.strip().split(maxsplit=1)
             if finder(path):
                 for package in packages.split(","):
-                    bin_pkgs.add(package.split("/")[1])
+                    bin_pkgs.add(package.rsplit("/", 1)[1])
 
     return bin_pkgs
 
