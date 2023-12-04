@@ -23,7 +23,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Rebuild a list of Debian source packages")
     parser.add_argument("pkg_list", type=argparse.FileType(mode="r"))
     parser.add_argument("job_name")
-    parser.add_argument("--extra-changes", dest="extra_changes", type=argparse.FileType(mode="r"), action="append")
+    parser.add_argument(
+        "--extra-changes", dest="extra_changes", type=argparse.FileType(mode="r"), action="append", default=[]
+    )
     return parser.parse_args()
 
 
