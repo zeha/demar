@@ -1,7 +1,3 @@
-linux       # too big
-linux-signed-arm64       # pointless
-linux-signed-amd64       # pointless
-ceph        # too big
 networking-mlnx # ftbfs and produces 7G buildlog
 barbican #1058183
 buildbot #1057929
@@ -11,7 +7,8 @@ openfpgaloader #1037802
 e2fsprogs #1053111
 lvm2 #1052666
 bolt #1052349
-docker.io # ftbfs is unshare
+docker.io # ftbfs caused by unshare
+util-linux # ftbfs caused by unshare
 system-config-printer #1054795
 ubertooth #1054741
 gpsd # needs makedev
@@ -26,41 +23,52 @@ azure-cli #1057393
 appstream-glib #1057394
 mbdyn #999554
 mat2 #1056594
-cfengine3 #1057420
+cfengine3 #1057420 (missing systemd files)
 sysstat #1057421
 ovn #1057436
 pmix #1057437
-gtk-sharp2 #RM
+gtk-sharp2 #RM pending
 ring #1057430
 gnustep-make #1057413
 pymupdf #1057402
 pynormalize #1057405
 seriousproton #997264
 tiny-dnn #1041134
-supertuxkart #ftbfs
-syslinux #ftbfs
+supertuxkart #1057463 (make install fails)
+syslinux #1057462 (fcf-protection)
 xrt #1037903
 yaramod #1037908
-openvswitch # takes forever
-macaulay2 # takes forever
-pyqt6 # takes forever
-rocblas # takes forever
 transmission #1042027
-weston #ftbfs
-xorp #pandoc
-usbguard #pandoc
+weston #1054695
 matrix-synapse #ftbfs
-deviceinfo #1052984
-fprintd #ftbfs
+fprintd #1042056 (tests fail)
 runc #ftbfs
-rdma-core #pandoc
-pystemd #ftbfs python
-rtpengine #pandoc
-rclone #pandoc
-mpd #ftbfs
-pdudaemon #ftbfs
-snapd #ftbfs
+mpd #1057578
+pdudaemon #1058396 (two python versions)
+snapd #1058277 (missing systemd files)
 389-ds-base #1052626
 ayatana-indicator-display #1052946
 fprintd #1042056
 zsh #1057610
+ntopng #1013302 5.2.1+dfsg1-1
+heat #1058531 1:21.0.0-3
+neutron-dynamic-routing #1058240 2:23.0.0-1
+neutron-vpnaas #1058123 2:23.0.0-1
+pygopherd #1058216 3.0.0~git20221126.02c65d60-4
+puppetserver #1042314 7.9.5-2
+xorp #958600 1.8.6~wip.20160715-2
+vast #1001527 2021.05.27-8
+yrmcds #1037907 1.1.9-1
+sahara #1058233 1:19.0.0-1
+srslte #993701 18.06.1+ds.1-1
+aufs-tools #943332
+neutron #ftbfs, openstack python problem
+gnome-keyring #ftbfs, unknown reason
+unicorn #ftbfs 6.1.0-1
+netopeer2 #ftbfs tests fail 2.0.35-1
+unattended-upgrades #1058172 2.9.1+nmu3
+ironic-python-agent # python tests fail 9.7.0-2
+netplan.io #1058524 0.107-5
+libervia-pubsub # setuptools fails 0.4.0+hg488-1
+mozillavpn #1027506 2.9.0-1
+sogo # python tests fail 5.8.4-1
