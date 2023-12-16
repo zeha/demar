@@ -2,8 +2,10 @@
 import argparse
 import gzip
 import pathlib
+import sys
 
 from debian import deb822
+from debian.debian_support import version_compare
 
 ARCHS = ["all", "arm64", "amd64"]
 COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
@@ -35,7 +37,8 @@ def parse_args() -> argparse.Namespace:
 def main():
     mirror = "/srv/debian-mirror/mirror"
     bin_pkgs = set()
-    source_pkgs = set()
+    found_bin_pkgs = set()
+    source_pkg_versions = {}
 
     args = parse_args()
     finder = FINDERS[args.finder]
@@ -52,15 +55,27 @@ def main():
             with gzip.open(pkglist_file, "rt") as pkglist:
                 for pkg in deb822.Packages.iter_paragraphs(pkglist):
                     bin_name = pkg["Package"]
-                    if bin_name not in bin_pkgs:
+                    if pkg["Package"] not in bin_pkgs:
                         continue
-                    source_pkgs.add(f"{pkg.source}_{pkg.source_version}")
-                    bin_pkgs.remove(bin_name)
+
+                    source_name = pkg.source
+                    source_version = pkg.source_version
+                    other_ver = source_pkg_versions.get(source_name)
+                    if other_ver and version_compare(other_ver, source_version) >= 0:
+                        continue
+                    source_pkg_versions[source_name] = source_version
+
+                    found_bin_pkgs.add(bin_name)
+
+    source_pkgs = set()
+    for source_name, source_version in source_pkg_versions.items():
+        source_pkgs.add(f"{source_name}_{source_version}")
 
     print("\n".join(sorted(source_pkgs)))
 
-    if bin_pkgs:
-        print("Unknown bins:", " ".join(sorted(bin_pkgs)))
+    unknown_bin_pkgs = bin_pkgs - found_bin_pkgs
+    if unknown_bin_pkgs:
+        print("Unknown bins:", " ".join(sorted(unknown_bin_pkgs)), file=sys.stderr)
 
 
 if __name__ == "__main__":
