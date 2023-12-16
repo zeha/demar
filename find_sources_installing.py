@@ -13,6 +13,7 @@ COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 FINDERS = {
     "udev": lambda path: path.startswith("lib/udev/"),
     "systemd": lambda path: path.startswith("lib/systemd/"),
+    "usrmerge": lambda path: path.startswith("lib/") or path.startswith("bin/") or path.startswith("sbin/"),
 }
 
 
@@ -58,14 +59,14 @@ def main():
                     if pkg["Package"] not in bin_pkgs:
                         continue
 
+                    found_bin_pkgs.add(bin_name)
+
                     source_name = pkg.source
                     source_version = pkg.source_version
                     other_ver = source_pkg_versions.get(source_name)
                     if other_ver and version_compare(other_ver, source_version) >= 0:
                         continue
                     source_pkg_versions[source_name] = source_version
-
-                    found_bin_pkgs.add(bin_name)
 
     source_pkgs = set()
     for source_name, source_version in source_pkg_versions.items():
