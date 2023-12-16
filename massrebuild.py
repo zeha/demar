@@ -44,6 +44,13 @@ def get_extra_pkgs(fp) -> list[str]:
     return extra_pkgs
 
 
+def read_skip_file(filename: str):
+    file = pathlib.Path(__file__).parent / filename
+    with file.open("r") as fp:
+        skip_reasons = [line.split("#", 1) for line in fp.read().strip().splitlines()]
+        return {k.strip(): v.strip() for (k, v) in skip_reasons}
+
+
 def main():
     args = parse_args()
     job_name = args.job_name
@@ -60,9 +67,9 @@ def main():
 
     srcpkgs = [line.strip() for line in args.pkg_list.readlines()]
 
-    with (pathlib.Path(__file__).parent / "known_broken").open("r") as fp:
-        known_broken = [line.split("#", 1) for line in fp.readlines()]
-        known_broken = {k.strip(): v.strip() for (k, v) in known_broken}
+    known_broken = read_skip_file("known_broken")
+    skip_reasons = read_skip_file("skip_reasons")
+    known_broken.update(skip_reasons)
 
     extra_pkgs = []
     for extra_fp in args.extra_changes:
@@ -125,6 +132,8 @@ def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -
         args.append(f"--extra-package={extra_pkg}")
 
     buildlog_file = buildlog_dir / srcpkg
+    if buildlog_file.exists():
+        buildlog_file.replace(buildlog_file.parent / f"{buildlog_file.name}.old")
     with buildlog_file.open("w") as out_fp:
         proc = subprocess.run(
             args,

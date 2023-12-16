@@ -10,11 +10,10 @@ import time
 
 CACHE_DIR = Path("~/.cache/demar").expanduser()
 
-BUGLIST_URL = r"https://udd.debian.org/bugs/?release=na&merged=ign&done=ign&fnewerval=7&flastmodval=7&fusertag=only&fusertagtag=dep17m2&fusertaguser=helmutg%40debian.org&allbugs=1&cseverity=1&ctags=1&caffected=1&clastupload=1&format=json"
+BUGLIST_URL = r"https://udd.debian.org/bugs/?release=na&merged=ign&fnewerval=7&flastmodval=7&fusertag=only&fusertagtag=dep17m2&fusertaguser=helmutg%40debian.org&allbugs=1&cseverity=1&ctags=1&caffected=1&clastupload=1&format=json"
 
 META = {
     "WARNING": "The tool producing this list is not very smart. Human discretion is required.",
-    "INFO-ftbfs": "ftbfs here can also mean the package was too large to rebuild or explicitly skipped.",
 }
 
 NMU_PATCH_AGE = datetime.timedelta(days=10)
@@ -36,12 +35,21 @@ ESSENTIAL = {
 }
 
 
+def read_skip_file(filename: str):
+    file = Path(__file__).parent / filename
+    print("Reading skip file", file)
+    with file.open("r") as fp:
+        skip_reasons = [line.split("#", 1) for line in fp.read().strip().splitlines()]
+        return {k.strip(): v.strip() for (k, v) in skip_reasons}
+
+
 def get_bugs():
     cache_file = CACHE_DIR / "bugs"
     if not cache_file.exists() or (time.time() - cache_file.stat().st_mtime) > 3600:
         print("Downloading bugs list")
+        result = httpx.get(BUGLIST_URL, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"}).read()
         with cache_file.open("wb") as fp:
-            fp.write(httpx.get(BUGLIST_URL, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"}).read())
+            fp.write(result)
 
     print("Using bugs cache", cache_file.absolute(), cache_file.stat().st_mtime)
     with cache_file.open("rb") as fp:
@@ -66,6 +74,9 @@ def get_transformed_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
             if v := bug.get(k):
                 detail[k] = v
 
+        if bug["status"] == "done" and not bug.get("affects_testing", False) and not bug.get("affects_unstable", False):
+            continue
+
         # if src.startswith("src:"):
         #     src = src[4:]
         bugs.setdefault(src, [])
@@ -79,23 +90,39 @@ def get_transformed_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
 
 
 def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
+    known_broken = read_skip_file("known_broken")
+    skip_reasons = read_skip_file("skip_reasons")
+
+    with Path(rebuild_list).open("r") as fp:
+        wanted_pkgs = set(fp.read().strip().splitlines())
+
     results = []
     seen_pkgs = set()
     for path in Path(buildlogs_dir).glob("*"):
+        if path.name.endswith(".old"):
+            continue
+        if path.name not in wanted_pkgs:
+            print("Ignoring buildlog", path)
+            continue
+
         seen_pkgs.add(path.name)
         (src_name, src_version) = path.name.split("_", maxsplit=1)
         if src_name == "base-files":
             continue
 
-        print(path)
+        print("Reading buildlog", path)
         found_files = set()
         count = 0
         in_summary = False
+        built = False
         build_failed = False
         with path.open("rb") as fp:
             for line in fp:
                 if in_summary:
-                    if line.startswith(b"Fail-Stage"):
+                    if line.startswith(b"Status: success"):
+                        built = True
+                        break
+                    if line.startswith(b"Fail-Stage:"):
                         build_failed = True
                         break
 
@@ -113,30 +140,46 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                     if count > 1000:
                         found_files.add("MORE_THAN_1000")
 
-        if found_files or build_failed:
+        if found_files or not built:
             r = {
                 "version": src_version,
                 "source": src_name,
                 "files": list(sorted(list(found_files))),
-                "ftbfs": build_failed,
             }
+            if not built:
+                ftbfs_reason = known_broken.get(src_name)
+                if ftbfs_reason:
+                    ftbfs_reason = f"maybe: {ftbfs_reason}"
+                elif build_failed:
+                    ftbfs_reason = "sbuild-failed"
+                else:
+                    ftbfs_reason = "unknown"
+                r["ftbfs"] = True
+                r["ftbfs_reason"] = ftbfs_reason
+
             results.append(r)
 
-    with Path(rebuild_list).open("r") as fp:
-        for line in fp:
-            line = line.strip()
-            if line in seen_pkgs:
-                continue
+    for pkg in wanted_pkgs - seen_pkgs:
+        (src_name, src_version) = pkg.split("_", maxsplit=1)
+        r = {
+            "version": src_version,
+            "source": src_name,
+            "files": [],
+            "built": False,
+        }
 
-            (src_name, src_version) = line.split("_", maxsplit=1)
-            r = {
-                "version": src_version,
-                "source": src_name,
-                "files": [],
-                "ftbfs": True,
-                "ftbfs_reason": "unknown",
-            }
-            results.append(r)
+        skip_reason = skip_reasons.get(src_name)
+        if skip_reason:
+            r["build_skip_reason"] = skip_reason
+        else:
+            ftbfs_reason = known_broken.get(src_name)
+            if ftbfs_reason:
+                build_problem = f"known ftbfs: {ftbfs_reason}"
+            else:
+                build_problem = "unknown, no build result found"
+            r["build_problem"] = build_problem
+
+        results.append(r)
 
     return results
 
@@ -168,24 +211,6 @@ def main():
         pkg_todo["bugs"] = bugs.get(src, [])
         del build_result["source"]
         pkg_todo["essential"] = src in ESSENTIAL
-
-        guessed_status = "needs-inspection"
-
-        for bug in pkg_todo["bugs"]:
-            if "patch" in bug["tags"]:
-                guessed_status = "patch-in-bts"
-                if "moreinfo" in bug["tags"]:
-                    guessed_status = "blocked-patch-in-bts"
-                elif "pending" in bug["tags"]:
-                    guessed_status = "patch-marked-pending"
-                elif today - datetime.date.fromisoformat(bug["last_modified"]) > NMU_PATCH_AGE:
-                    guessed_status = "lingering-patch-in-bts-maybe-ping-nmu"
-
-                break
-
-            guessed_status = "bug-filed"
-
-        pkg_todo["guessed_status"] = guessed_status
 
         groups = set()
 
@@ -241,13 +266,40 @@ def main():
             if len(groups) == 0:
                 groups.add("UNCATEGORIZED")
 
-        if build_result["ftbfs"]:
+        if build_result.get("ftbfs", False):
+            groups.add("ftbfs")
+        if "ftbfs" in build_result.get("build_problem", ""):
             groups.add("ftbfs")
 
         if pkg_todo["essential"]:
             groups.add("essential")
 
-        pkg_todo["groups"] = list(groups)
+        pkg_todo["groups"] = list(sorted(list(groups)))
+
+        guessed_status = None
+        for bug in pkg_todo["bugs"]:
+            if "patch" in bug["tags"]:
+                guessed_status = "patch-in-bts"
+                if "moreinfo" in bug["tags"]:
+                    guessed_status = "blocked-patch-in-bts"
+                elif "pending" in bug["tags"]:
+                    guessed_status = "patch-marked-pending"
+                elif today - datetime.date.fromisoformat(bug["last_modified"]) > NMU_PATCH_AGE:
+                    guessed_status = "lingering-patch-in-bts-maybe-ping-nmu"
+
+                break
+
+            guessed_status = "bug-filed"
+
+        if guessed_status is None:
+            guessed_status = "needs-inspection"
+            if "just-sbin" in groups or "just-bin" in groups or "pam" in groups:
+                guessed_status = "move-paused"
+
+        if "essential" in groups:
+            guessed_status = "essential-move-at-end"
+
+        pkg_todo["guessed_status"] = guessed_status
 
         stats["guessed_status"].setdefault(guessed_status, 0)
         stats["guessed_status"][guessed_status] += 1
@@ -260,9 +312,6 @@ def main():
 
         if not build_result["files"]:
             del build_result["files"]
-
-        if not build_result["ftbfs"]:
-            del build_result["ftbfs"]
 
         pkg_todo["build_result"] = build_result
         work_todo[src] = pkg_todo
