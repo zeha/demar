@@ -2,6 +2,7 @@
 import argparse
 import gzip
 import pathlib
+import sys
 
 from debian import deb822
 from debian.debian_support import version_compare
@@ -45,7 +46,7 @@ def main():
 
     unversioned_srcs -= set(source_pkg_versions.keys())
     if unversioned_srcs:
-        print("Unknown src:", " ".join(sorted(unversioned_srcs)))
+        print("Unknown src:", " ".join(sorted(unversioned_srcs)), file=sys.stderr)
 
 
 if __name__ == "__main__":
