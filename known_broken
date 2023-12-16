@@ -1,7 +1,12 @@
 linux       # too big
-kino        # FTBFS, rm pending
-libdjconsole        # FTBFS since 2021
-bluez       #1052983
+linux-signed-arm64       # pointless
+linux-signed-amd64       # pointless
+ceph        # too big
+networking-mlnx # ftbfs and produces 7G buildlog
+barbican #1058183
+buildbot #1057929
+cadvisor #1005678
+condor #925657 and others
 openfpgaloader #1037802
 e2fsprogs #1053111
 lvm2 #1052666
@@ -11,3 +16,51 @@ system-config-printer #1054795
 ubertooth #1054741
 gpsd # needs makedev
 razercfg #1054799
+linuxcnc #1056990
+elastix #1057398
+modemmanager #1057269
+aalib #1057381
+cinnamon #1057391
+codelite #1057392
+azure-cli #1057393
+appstream-glib #1057394
+mbdyn #999554
+mat2 #1056594
+cfengine3 #1057420
+sysstat #1057421
+ovn #1057436
+pmix #1057437
+gtk-sharp2 #RM
+ring #1057430
+gnustep-make #1057413
+pymupdf #1057402
+pynormalize #1057405
+seriousproton #997264
+tiny-dnn #1041134
+supertuxkart #ftbfs
+syslinux #ftbfs
+xrt #1037903
+yaramod #1037908
+openvswitch # takes forever
+macaulay2 # takes forever
+pyqt6 # takes forever
+rocblas # takes forever
+transmission #1042027
+weston #ftbfs
+xorp #pandoc
+usbguard #pandoc
+matrix-synapse #ftbfs
+deviceinfo #1052984
+fprintd #ftbfs
+runc #ftbfs
+rdma-core #pandoc
+pystemd #ftbfs python
+rtpengine #pandoc
+rclone #pandoc
+mpd #ftbfs
+pdudaemon #ftbfs
+snapd #ftbfs
+389-ds-base #1052626
+ayatana-indicator-display #1052946
+fprintd #1042056
+zsh #1057610
