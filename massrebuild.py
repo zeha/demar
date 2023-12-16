@@ -113,6 +113,8 @@ def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -
     args = [
         "sbuild",
         "--dist=unstable",
+        "--no-apt-upgrade",
+        "--no-apt-distupgrade",
         "--nolog",
         "--no-run-piuparts",
         "--no-run-lintian",
@@ -124,7 +126,20 @@ def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -
 
     buildlog_file = buildlog_dir / srcpkg
     with buildlog_file.open("w") as out_fp:
-        proc = subprocess.run(args, stdout=out_fp, stderr=subprocess.PIPE)
+        proc = subprocess.run(
+            args,
+            stdout=out_fp,
+            stderr=subprocess.PIPE,
+            env={
+                "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG": "en_US.UTF-8",
+                "LC_ALL": "C.UTF-8",
+                "SHELL": "/bin/sh",
+                "USER": os.getenv("USER"),
+                "LOGNAME": os.getenv("LOGNAME"),
+                "HOME": os.getenv("HOME"),
+            },
+        )
 
     result = {"status": "unknown"}
     if proc.returncode != 0:
