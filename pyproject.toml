@@ -5,6 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "demar"
 dependencies = [
+    "httpx",
+    "psycopg",
     "python-debian",
     "pyyaml",
 ]

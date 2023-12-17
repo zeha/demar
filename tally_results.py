@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 import argparse
-import json
-from pathlib import Path
-import re
-import httpx
-import yaml
 import datetime
+import json
+import re
 import time
+from pathlib import Path
+
+import httpx
 import psycopg
 import psycopg.rows
+import yaml
 
 CACHE_DIR = Path("~/.cache/demar").expanduser()
 
