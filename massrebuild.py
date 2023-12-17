@@ -105,6 +105,20 @@ def do_build_one(workitem) -> dict:
     return {srcpkg: {"package": srcpkg} | result}
 
 
+def _create_subprocess_env_block() -> dict:
+    env = {
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "SHELL": "/bin/sh",
+        "USER": os.getenv("USER"),
+        "LOGNAME": os.getenv("LOGNAME"),
+        "HOME": os.getenv("HOME"),
+    }
+    env = {k: v for (k, v) in env.items() if k and v}
+    return env
+
+
 def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -> dict:
     build_dir.cwd()
 
@@ -132,7 +146,7 @@ def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken
         print("Skipping", srcpkg, f"(known broken: {broken_detail})")
         return {"status": "known_broken", "detail": broken_detail}
 
-    print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...", f"(worker={os.getpid()})")
+    print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...", f"(worker={os.getpid()})", flush=True)
     args = [
         "sbuild",
         "--dist=unstable",
@@ -141,6 +155,7 @@ def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken
         "--nolog",
         "--no-run-piuparts",
         "--no-run-lintian",
+        "--profiles=nocheck",
         f"--build-dir={build_dir}",
         srcpkg,
     ]
@@ -155,15 +170,7 @@ def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken
             args,
             stdout=out_fp,
             stderr=subprocess.PIPE,
-            env={
-                "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "LANG": "en_US.UTF-8",
-                "LC_ALL": "C.UTF-8",
-                "SHELL": "/bin/sh",
-                "USER": os.getenv("USER"),
-                "LOGNAME": os.getenv("LOGNAME"),
-                "HOME": os.getenv("HOME"),
-            },
+            env=_create_subprocess_env_block(),
         )
 
     result = {"status": "unknown"}
