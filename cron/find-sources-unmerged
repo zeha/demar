@@ -1,0 +1,7 @@
+#!/bin/bash
+set -ex
+cd ~/usrmerge-work
+
+~/demar/find_sources_installing.py usrmerge > ~/usrmerge-work/sources-unmerged.tmp
+cp ~/usrmerge-work/sources-unmerged.tmp ~/usrmerge-work/sources-unmerged
+mv ~/usrmerge-work/sources-unmerged.tmp ~/usrmerge-work/sources-unmerged.$(date +%s)

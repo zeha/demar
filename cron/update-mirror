@@ -1,0 +1,17 @@
+#!/bin/bash
+# mirror.anexia.at
+#MIRROR_HOST=144.208.213.156
+# ftp.acc.umu.se.
+MIRROR_HOST=194.71.11.163
+
+exec debmirror -p -v \
+    --host=$MIRROR_HOST \
+    --rsync-batch=5000 \
+    --method=rsync \
+    --dist=unstable \
+    --arch=amd64,arm64 \
+    --getcontents \
+    --no-check-gpg \
+    --diff=none \
+    --rsync-extra=trace \
+    /srv/debian-mirror/mirror

@@ -1,0 +1,11 @@
+#!/bin/bash
+TARGET_SCRIPT="$1"
+shift
+TIMEOUT="$1"
+shift
+
+ME=demar-"$TARGET_SCRIPT"
+
+cd ~/usrmerge-work
+exec systemd-cat -t "$ME" timeout "$TIMEOUT" flock --verbose -n ~/.cache/demar/flock-"$ME" \
+	~/demar/cron/"$TARGET_SCRIPT" "$@"

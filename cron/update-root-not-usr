@@ -1,0 +1,5 @@
+#!/bin/zsh
+(for filename in $(find /srv/debian-mirror/mirror -name '*.deb' | sort); do
+    FOUND=$(dpkg-deb -c $filename | egrep ' \./(bin|lib|sbin)')
+    if [ -n "$FOUND" ]; then echo; echo $filename; echo $FOUND; fi;
+done) > ~/root-not-usr-$(date +%Y%m%d)
