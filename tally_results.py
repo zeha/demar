@@ -7,8 +7,12 @@ import httpx
 import yaml
 import datetime
 import time
+import psycopg
+import psycopg.rows
 
 CACHE_DIR = Path("~/.cache/demar").expanduser()
+
+PG_UDD_URL = "postgresql://udd-mirror:udd-mirror@udd-mirror.debian.net/udd?client_encoding=utf-8"
 
 BUGLIST_URL = r"https://udd.debian.org/bugs/?release=na&merged=ign&fnewerval=7&flastmodval=7&fusertag=only&fusertagtag=dep17m2&fusertaguser=helmutg%40debian.org&allbugs=1&cseverity=1&ctags=1&caffected=1&clastupload=1&format=json"
 
@@ -43,12 +47,51 @@ def read_skip_file(filename: str):
         return {k.strip(): v.strip() for (k, v) in skip_reasons}
 
 
+def query_bugs_http():
+    print("Downloading bugs list")
+    return httpx.get(BUGLIST_URL, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"}).read().json()
+
+
+def query_bugs_udd():
+    sql = """
+    with sources_uploads as (
+        select max(date) AS lastupload, s1.source
+        from sources s1, upload_history uh
+        where s1.source = uh.source
+        and s1.version = uh.version
+        and s1.release='sid'
+        group by s1.source
+    ),
+    bugs_usertagged as (
+        select id
+        from bugs_usertags
+        where email='helmutg@debian.org' and tag like 'dep17%'
+    )
+    select bugs.id, bugs.source, bugs.severity, bugs.title,
+        bugs.last_modified::text,
+        bugs.status,
+        bugs.affects_testing, bugs.affects_unstable, bugs.affects_experimental,
+        sources_uploads.lastupload::text,
+        coalesce((select array_agg(bugs_tags.tag) from bugs_tags where bugs_tags.id = bugs.id), array[]::text[]) as tags,
+        (select max(version) from bugs_found_in where bugs_found_in.id = bugs.id) as max_found_in
+    from bugs_usertagged
+    join bugs on bugs.id = bugs_usertagged.id
+    join sources_uploads on bugs.source = sources_uploads.source
+    where
+        bugs.id not in (select id from bugs_merged_with where id > merged_with)
+    """
+    with psycopg.connect(PG_UDD_URL, row_factory=psycopg.rows.dict_row) as conn:
+        # Open a cursor to perform database operations
+        with conn.cursor() as cursor:
+            return cursor.execute(sql).fetchall()
+
+
 def get_bugs():
     cache_file = CACHE_DIR / "bugs"
     if not cache_file.exists() or (time.time() - cache_file.stat().st_mtime) > 3600:
         print("Downloading bugs list")
-        result = httpx.get(BUGLIST_URL, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"}).read()
-        with cache_file.open("wb") as fp:
+        result = json.dumps(query_bugs_udd())
+        with cache_file.open("w") as fp:
             fp.write(result)
 
     print("Using bugs cache", cache_file.absolute(), cache_file.stat().st_mtime)
@@ -105,7 +148,6 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
             print("Ignoring buildlog", path)
             continue
 
-        seen_pkgs.add(path.name)
         (src_name, src_version) = path.name.split("_", maxsplit=1)
         if src_name == "base-files":
             continue
@@ -114,21 +156,19 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
         found_files = set()
         count = 0
         in_summary = False
-        built = False
-        build_failed = False
+        built = False  # did sbuild complete (success or failure)
+        build_fail_stage = None
         with path.open("rb") as fp:
             for line in fp:
                 if in_summary:
-                    if line.startswith(b"Status: success"):
-                        built = True
-                        break
                     if line.startswith(b"Fail-Stage:"):
-                        build_failed = True
-                        break
+                        build_fail_stage = line.split(b" ", maxsplit=1)[1].decode().strip()
+                        continue
 
                 else:
                     if line.startswith(b"| Summary"):
                         in_summary = True
+                        built = True
 
                     if count > 1000:
                         continue
@@ -140,24 +180,33 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                     if count > 1000:
                         found_files.add("MORE_THAN_1000")
 
-        if found_files or not built:
-            r = {
-                "version": src_version,
-                "source": src_name,
-                "files": list(sorted(list(found_files))),
-            }
-            if not built:
+        if built:
+            seen_pkgs.add(path.name)
+            if found_files:
+                r = {
+                    "version": src_version,
+                    "source": src_name,
+                    "files": list(sorted(list(found_files))),
+                }
+                results.append(r)
+
+            if build_fail_stage is not None:
+                r = {
+                    "version": src_version,
+                    "source": src_name,
+                    "files": [],
+                }
                 ftbfs_reason = known_broken.get(src_name)
                 if ftbfs_reason:
-                    ftbfs_reason = f"maybe: {ftbfs_reason}"
-                elif build_failed:
-                    ftbfs_reason = "sbuild-failed"
+                    ftbfs_reason = f"maybe-known-ftbfs {ftbfs_reason}"
+                elif build_fail_stage:
+                    ftbfs_reason = f"sbuild-failed-in-stage {build_fail_stage}"
                 else:
                     ftbfs_reason = "unknown"
                 r["ftbfs"] = True
                 r["ftbfs_reason"] = ftbfs_reason
 
-            results.append(r)
+                results.append(r)
 
     for pkg in wanted_pkgs - seen_pkgs:
         (src_name, src_version) = pkg.split("_", maxsplit=1)
@@ -174,7 +223,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
         else:
             ftbfs_reason = known_broken.get(src_name)
             if ftbfs_reason:
-                build_problem = f"known ftbfs: {ftbfs_reason}"
+                build_problem = f"known-ftbfs {ftbfs_reason}"
             else:
                 build_problem = "unknown, no build result found"
             r["build_problem"] = build_problem
@@ -197,7 +246,7 @@ def main():
     CACHE_DIR.mkdir(exist_ok=True)
 
     work_todo = {}
-    today = datetime.date.today()
+    today = datetime.datetime.today()
 
     print("Reading bugs")
     pkg_meta, bugs = get_transformed_bugs()
@@ -284,7 +333,7 @@ def main():
                     guessed_status = "blocked-patch-in-bts"
                 elif "pending" in bug["tags"]:
                     guessed_status = "patch-marked-pending"
-                elif today - datetime.date.fromisoformat(bug["last_modified"]) > NMU_PATCH_AGE:
+                elif today - datetime.datetime.fromisoformat(bug["last_modified"]) > NMU_PATCH_AGE:
                     guessed_status = "lingering-patch-in-bts-maybe-ping-nmu"
 
                 break
