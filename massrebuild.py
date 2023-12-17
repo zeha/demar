@@ -51,6 +51,15 @@ def read_skip_file(filename: str):
         return {k.strip(): v.strip() for (k, v) in skip_reasons}
 
 
+def read_fail_file(job_dir: pathlib.Path) -> dict[str, str]:
+    file = job_dir / "fail"
+    if not file.exists():
+        return {}
+    with file.open("r") as fp:
+        fails = [line.split(" ", maxsplit=2) for line in fp.read().strip().splitlines()]
+        return {fail[1]: fail[2] for fail in fails}
+
+
 def main():
     args = parse_args()
     job_name = args.job_name
@@ -80,7 +89,7 @@ def main():
     with multiprocessing.Pool(max_parallel) as pool:
         results = pool.map(
             do_build_one,
-            [(srcpkg, str(build_dir), str(buildlog_dir), extra_pkgs, known_broken) for srcpkg in srcpkgs],
+            [(srcpkg, str(job_dir), str(build_dir), str(buildlog_dir), extra_pkgs, known_broken) for srcpkg in srcpkgs],
             1,
         )
 
@@ -89,13 +98,20 @@ def main():
 
 
 def do_build_one(workitem) -> dict:
-    srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken = workitem
-    result = build_one(srcpkg, pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs, known_broken)
+    srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken = workitem
+    result = build_one(
+        srcpkg, pathlib.Path(job_dir), pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs, known_broken
+    )
     return {srcpkg: {"package": srcpkg} | result}
 
 
-def build_one(srcpkg, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -> dict:
+def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -> dict:
     build_dir.cwd()
+
+    fails = read_fail_file(job_dir)
+    if srcpkg in fails:
+        print("Skipping", srcpkg, "(in fail file)")
+        return {"status": "in_fail_file"}
 
     if "_" in srcpkg:
         srcpkg_name = srcpkg.split("_")[0]
