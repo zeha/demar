@@ -73,7 +73,7 @@ def query_bugs_udd():
         bugs.status,
         bugs.affects_testing, bugs.affects_unstable, bugs.affects_experimental,
         sources_uploads.lastupload::text,
-        coalesce((select array_agg(bugs_tags.tag) from bugs_tags where bugs_tags.id = bugs.id), array[]::text[]) as tags,
+        coalesce((select array_agg(bugs_tags.tag order by tag) from bugs_tags where bugs_tags.id = bugs.id), array[]::text[]) as tags,
         (select max(version) from bugs_found_in where bugs_found_in.id = bugs.id) as max_found_in
     from bugs_usertagged
     join bugs on bugs.id = bugs_usertagged.id
