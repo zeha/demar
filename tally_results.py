@@ -39,6 +39,9 @@ ESSENTIAL = {
     "tar",
 }
 
+ONE_UPLOAD = {
+    "bash", "base-files", "coreutils", "dash", "glibc", "util-linux",
+}
 
 def read_skip_file(filename: str):
     file = Path(__file__).parent / filename
@@ -343,11 +346,12 @@ def main():
 
         if guessed_status is None:
             guessed_status = "needs-inspection"
-            if "just-sbin" in groups or "just-bin" in groups or "pam" in groups:
-                guessed_status = "move-paused"
 
         if "essential" in groups:
             guessed_status = "essential-move-at-end"
+
+        if src in ONE_UPLOAD:
+            guessed_status = "essential-move-in-one-upload-by-helmut"
 
         pkg_todo["guessed_status"] = guessed_status
 

@@ -27,6 +27,7 @@ def main():
             "patch-in-bts",
             "patch-marked-pending",
             "bug-filed",
+            "lingering-patch-in-bts-maybe-ping-nmu",
         ):
             filtered[src_name] = detail
 
