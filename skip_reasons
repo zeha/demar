@@ -1,7 +1,6 @@
 linux       # needs manual inspection, assumed bwh is on it
 linux-signed-arm64       # will change with src:linux
 linux-signed-amd64       # will change with src:linux
-ceph        # too big to rebuild
 openvswitch # too big to rebuild
 macaulay2 # too big to rebuild
 pyqt6 # too big to rebuild
