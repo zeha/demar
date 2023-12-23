@@ -1,0 +1,23 @@
+#!/bin/bash
+set -ex
+cd /srv/debian-mirror/mirror/dists/unstable
+for component in main non-free non-free-firmware contrib; do
+  for arch in binary-amd64 binary-arm64 binary-all; do
+    mkdir -p $component/$arch/by-hash/SHA256/
+    for packagefile in Packages.xz Packages.gz; do
+      h=$(sha256sum -b $component/$arch/$packagefile | awk '{print $1}')
+      ln -sr ./$component/$arch/$packagefile $component/$arch/by-hash/SHA256/$h
+    done
+
+  done
+
+  for arch in source; do
+    mkdir -p $component/$arch/by-hash/SHA256/
+    for packagefile in Sources.xz Sources.gz; do
+      h=$(sha256sum -b $component/$arch/$packagefile | awk '{print $1}')
+      ln -sr ./$component/$arch/$packagefile $component/$arch/by-hash/SHA256/$h
+    done
+
+  done
+
+done

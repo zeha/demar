@@ -4,5 +4,4 @@ exec \
     ~/demar/massrebuild.py \
     ~/usrmerge-work/sources-unmerged \
     job-unmoved-rebuild \
-    --extra-changes ~/Debian/usrmerge/systemd_255-1+XXXXXLOCAL_amd64.changes \
-    --extra-changes ~/Debian/usrmerge/debhelper_13.11.8+zzz999999_amd64.changes
+    --extra-changes ~/Debian/usrmerge/systemd_255-1+XXXXXLOCAL_amd64.changes

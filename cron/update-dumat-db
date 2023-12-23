@@ -1,0 +1,6 @@
+#!/bin/bash
+set -ex
+cd /home/ch/Debian/dumat
+curl -fsL 'https://subdivi.de/~helmut/dumat.sql.zst' | zstdcat - | sqlite3 dumat-new.db
+mv -f dumat-new.db dumat.db
+./analyze.py -d dumat.db > dumat.yaml
