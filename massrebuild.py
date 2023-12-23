@@ -114,6 +114,7 @@ def _create_subprocess_env_block() -> dict:
         "USER": os.getenv("USER"),
         "LOGNAME": os.getenv("LOGNAME"),
         "HOME": os.getenv("HOME"),
+        "DEB_BUILD_OPTIONS": "nocheck",
     }
     env = {k: v for (k, v) in env.items() if k and v}
     return env
@@ -155,7 +156,6 @@ def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken
         "--nolog",
         "--no-run-piuparts",
         "--no-run-lintian",
-        "--profiles=nocheck",
         f"--build-dir={build_dir}",
         srcpkg,
     ]
