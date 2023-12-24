@@ -2,7 +2,7 @@
 set -ex
 cd ~/usrmerge-work
 
-~/demar/tally_results.py -o ~/demar-tally/demar-tally.yaml --buildlogs-dir ~/usrmerge-work/job-unmoved-rebuild/buildlogs --rebuild-list ~/usrmerge-work/sources-unmerged
+~/demar/tally_results.py -o ~/demar-tally/demar-tally.yaml --output-need-rebuild ~/demar-tally/need-rebuild.yaml --buildlogs-dir ~/usrmerge-work/job-unmoved-rebuild/buildlogs --rebuild-list ~/usrmerge-work/sources-unmerged
 
 cd ~/demar-tally
 git commit -a -m 'update'

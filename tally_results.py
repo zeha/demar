@@ -162,6 +162,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
         in_summary = False
         built = False  # did sbuild complete (success or failure)
         build_fail_stage = None
+        source_arch = None
         with path.open("rb") as fp:
             for line in fp:
                 if in_summary:
@@ -173,6 +174,8 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                     if line.startswith(b"| Summary"):
                         in_summary = True
                         built = True
+                    if source_arch is None and line.startswith(b"Architecture:"):
+                        source_arch = line.split(b": ", maxsplit=1)[1].decode().strip().split()
 
                     if count > 1000:
                         continue
@@ -186,20 +189,16 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
 
         if built:
             seen_pkgs.add(path.name)
-            if found_files:
-                r = {
-                    "version": src_version,
-                    "source": src_name,
-                    "files": list(sorted(list(found_files))),
-                }
-                results.append(r)
+
+            r = {
+                "version": src_version,
+                "source": src_name,
+                "built": built,
+                "architecture": source_arch,
+                "files": list(sorted(list(found_files))),
+            }
 
             if build_fail_stage is not None:
-                r = {
-                    "version": src_version,
-                    "source": src_name,
-                    "files": [],
-                }
                 ftbfs_reason = known_broken.get(src_name)
                 if ftbfs_reason:
                     ftbfs_reason = f"maybe-known-ftbfs {ftbfs_reason}"
@@ -210,7 +209,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                 r["ftbfs"] = True
                 r["ftbfs_reason"] = ftbfs_reason
 
-                results.append(r)
+            results.append(r)
 
     for pkg in wanted_pkgs - seen_pkgs:
         (src_name, src_version) = pkg.split("_", maxsplit=1)
@@ -242,6 +241,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-o", dest="output", required=True)
     parser.add_argument("--buildlogs-dir", dest="buildlogs_dir", required=True)
     parser.add_argument("--rebuild-list", dest="rebuild_list", required=True)
+    parser.add_argument("--output-need-rebuild", dest="output_need_rebuild")
     return parser.parse_args()
 
 
@@ -250,6 +250,7 @@ def main():
     CACHE_DIR.mkdir(exist_ok=True)
 
     work_todo = {}
+    need_rebuild = {}
     today = datetime.datetime.today()
 
     print("Reading bugs")
@@ -264,6 +265,7 @@ def main():
         pkg_todo["bugs"] = bugs.get(src, [])
         del build_result["source"]
         pkg_todo["essential"] = src in ESSENTIAL
+        just_need_rebuild = False
 
         groups = set()
 
@@ -344,6 +346,18 @@ def main():
 
             guessed_status = "bug-filed"
 
+        if (
+            guessed_status is None
+            and build_result["built"]
+            and not build_result.get("ftbfs", False)
+            and not build_result.get("files", [])
+        ):
+            just_need_rebuild = True
+            if "all" in build_result["architecture"]:
+                guessed_status = "needs-no-change-upload"
+            else:
+                guessed_status = "needs-binnmu"
+
         if guessed_status is None:
             guessed_status = "needs-inspection"
 
@@ -368,7 +382,11 @@ def main():
             del build_result["files"]
 
         pkg_todo["build_result"] = build_result
-        work_todo[src] = pkg_todo
+
+        if just_need_rebuild:
+            need_rebuild[src] = pkg_todo
+        else:
+            work_todo[src] = pkg_todo
 
     meta = {
         "rebuild_timestamp": datetime.datetime.fromtimestamp(Path(args.rebuild_list).stat().st_mtime).isoformat(),
@@ -377,6 +395,10 @@ def main():
 
     with Path(args.output).open("w") as fp:
         yaml.safe_dump_all([{"___meta": meta}, {"___stats": stats}, work_todo], fp)
+
+    if args.output_need_rebuild:
+        with Path(args.output_need_rebuild).open("w") as fp:
+            yaml.safe_dump_all([need_rebuild], fp)
 
 
 if __name__ == "__main__":
