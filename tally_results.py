@@ -40,8 +40,71 @@ ESSENTIAL = {
 }
 
 ONE_UPLOAD = {
-    "bash", "base-files", "coreutils", "dash", "glibc", "util-linux",
+    "bash",
+    "base-files",
+    "coreutils",
+    "dash",
+    "glibc",
+    "util-linux",
 }
+
+DEBOOTSTRAP_VARIANT_ESSENTIAL = {
+    "acl",
+    "attr",
+    "audit",
+    "base-files",
+    "base-passwd",
+    "bash",
+    "bzip2",
+    "cdebconf",
+    "coreutils",
+    "dash",
+    "db5.3",
+    "debconf",
+    "debianutils",
+    "diffutils",
+    "dpkg",
+    "findutils",
+    "gcc-10",
+    "gcc-12",
+    "gcc-13",
+    "gdbm",
+    "glibc",
+    "gmp",
+    "grep",
+    "gzip",
+    "hostname",
+    "init-system-helpers",
+    "libcap2",
+    "libcap-ng",
+    "libfile-find-rule-perl",
+    "libgcrypt20",
+    "libgpg-error",
+    "libmd",
+    "libnumber-compare-perl",
+    "libselinux",
+    "libtext-glob-perl",
+    "libxcrypt",
+    "libzstd",
+    "lz4",
+    "mawk",
+    "ncurses",
+    "openssl",
+    "pam",
+    "pcre2",
+    "perl",
+    "sed",
+    "shadow",
+    "systemd",
+    "sysvinit",
+    "tar",
+    "usrmerge",
+    "util-linux",
+    "xz-utils",
+    "zlib",
+}
+PSEUDO_ESSENTIAL = DEBOOTSTRAP_VARIANT_ESSENTIAL - ESSENTIAL - ONE_UPLOAD
+
 
 def read_skip_file(filename: str):
     file = Path(__file__).parent / filename
@@ -264,7 +327,6 @@ def main():
         pkg_todo = pkg_meta.get(src, {})
         pkg_todo["bugs"] = bugs.get(src, [])
         del build_result["source"]
-        pkg_todo["essential"] = src in ESSENTIAL
         just_need_rebuild = False
 
         groups = set()
@@ -326,8 +388,10 @@ def main():
         if "ftbfs" in build_result.get("build_problem", ""):
             groups.add("ftbfs")
 
-        if pkg_todo["essential"]:
+        if src in ESSENTIAL:
             groups.add("essential")
+        if src in PSEUDO_ESSENTIAL:
+            groups.add("pseudo-essential")
 
         pkg_todo["groups"] = list(sorted(list(groups)))
 
