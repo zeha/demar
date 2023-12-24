@@ -1,0 +1,5 @@
+#!/bin/bash
+set -ex
+
+mmdebstrap --variant=buildd unstable ~/.cache/sbuild/unstable-amd64-new.tar ~/.chdist/unstable/etc/apt/sources.list
+mv ~/.cache/sbuild/unstable-amd64-new.tar ~/.cache/sbuild/unstable-amd64.tar

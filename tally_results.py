@@ -6,16 +6,9 @@ import re
 import time
 from pathlib import Path
 
-import httpx
-import psycopg
-import psycopg.rows
 import yaml
 
 CACHE_DIR = Path("~/.cache/demar").expanduser()
-
-PG_UDD_URL = "postgresql://udd-mirror:udd-mirror@udd-mirror.debian.net/udd?client_encoding=utf-8"
-
-BUGLIST_URL = r"https://udd.debian.org/bugs/?release=na&merged=ign&fnewerval=7&flastmodval=7&fusertag=only&fusertagtag=dep17m2&fusertaguser=helmutg%40debian.org&allbugs=1&cseverity=1&ctags=1&caffected=1&clastupload=1&format=json"
 
 META = {
     "WARNING": "The tool producing this list is not very smart. Human discretion is required.",
@@ -114,62 +107,21 @@ def read_skip_file(filename: str):
         return {k.strip(): v.strip() for (k, v) in skip_reasons}
 
 
-def query_bugs_http():
-    print("Downloading bugs list")
-    return httpx.get(BUGLIST_URL, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"}).read().json()
-
-
-def query_bugs_udd():
-    sql = """
-    with sources_uploads as (
-        select max(date) AS lastupload, s1.source
-        from sources s1, upload_history uh
-        where s1.source = uh.source
-        and s1.version = uh.version
-        and s1.release='sid'
-        group by s1.source
-    ),
-    bugs_usertagged as (
-        select id
-        from bugs_usertags
-        where email='helmutg@debian.org' and tag like 'dep17%'
-    )
-    select bugs.id, bugs.source, bugs.severity, bugs.title,
-        bugs.last_modified::text,
-        bugs.status,
-        bugs.affects_testing, bugs.affects_unstable, bugs.affects_experimental,
-        sources_uploads.lastupload::text,
-        coalesce((select array_agg(bugs_tags.tag order by tag) from bugs_tags where bugs_tags.id = bugs.id), array[]::text[]) as tags,
-        (select max(version) from bugs_found_in where bugs_found_in.id = bugs.id) as max_found_in
-    from bugs_usertagged
-    join bugs on bugs.id = bugs_usertagged.id
-    join sources_uploads on bugs.source = sources_uploads.source
-    where
-        bugs.id not in (select id from bugs_merged_with where id > merged_with)
-    """
-    with psycopg.connect(PG_UDD_URL, row_factory=psycopg.rows.dict_row) as conn:
-        # Open a cursor to perform database operations
-        with conn.cursor() as cursor:
-            return cursor.execute(sql).fetchall()
-
-
-def get_bugs():
-    cache_file = CACHE_DIR / "bugs"
-    if not cache_file.exists() or (time.time() - cache_file.stat().st_mtime) > 3600:
-        print("Downloading bugs list")
-        result = json.dumps(query_bugs_udd())
-        with cache_file.open("w") as fp:
-            fp.write(result)
+def read_bugs_cache(selector: str):
+    cache_file = CACHE_DIR / f"bugs-{selector}"
+    if not cache_file.exists() or (time.time() - cache_file.stat().st_mtime) > 86400:
+        print("Bugs cache", cache_file.absolute(), "is missing or too old")
+        raise RuntimeError("bugs cache unusable")
 
     print("Using bugs cache", cache_file.absolute(), cache_file.stat().st_mtime)
     with cache_file.open("rb") as fp:
         return json.load(fp)
 
 
-def get_transformed_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
+def get_dep17_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
     bugs = {}
     pkg_meta = {}
-    for bug in get_bugs():
+    for bug in read_bugs_cache("dep17"):
         src = bug["source"]
         detail = {
             "id": bug["id"],
@@ -187,8 +139,6 @@ def get_transformed_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
         if bug["status"] == "done" and not bug.get("affects_testing", False) and not bug.get("affects_unstable", False):
             continue
 
-        # if src.startswith("src:"):
-        #     src = src[4:]
         bugs.setdefault(src, [])
         bugs[src].append(detail)
 
@@ -199,9 +149,19 @@ def get_transformed_bugs() -> tuple[dict[str, dict], dict[str, list[dict]]]:
     return pkg_meta, bugs
 
 
+def get_ftbfs_bugs() -> dict[str, list[dict]]:
+    buglist = read_bugs_cache("ftbfs")
+    bugs = {}
+    for bug in buglist:
+        src = bug["source"]
+        bugs.setdefault(src, [])
+        bugs[src].append(bug)
+    return bugs
+
+
 def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
-    known_broken = read_skip_file("known_broken")
     skip_reasons = read_skip_file("skip_reasons")
+    ftbfs_bugs = get_ftbfs_bugs()
 
     with Path(rebuild_list).open("r") as fp:
         wanted_pkgs = set(fp.read().strip().splitlines())
@@ -262,9 +222,10 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
             }
 
             if build_fail_stage is not None:
-                ftbfs_reason = known_broken.get(src_name)
-                if ftbfs_reason:
-                    ftbfs_reason = f"maybe-known-ftbfs {ftbfs_reason}"
+                filtered_ftbfs_bugs = ftbfs_bugs.get(src_name)
+                if filtered_ftbfs_bugs:
+                    filtered_ftbfs_bugs = [f"{bug['id']}: {bug['title']}" for bug in filtered_ftbfs_bugs]
+                    ftbfs_reason = f"maybe-known-ftbfs {';'.join(filtered_ftbfs_bugs)}"
                 elif build_fail_stage:
                     ftbfs_reason = f"sbuild-failed-in-stage {build_fail_stage}"
                 else:
@@ -287,12 +248,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
         if skip_reason:
             r["build_skip_reason"] = skip_reason
         else:
-            ftbfs_reason = known_broken.get(src_name)
-            if ftbfs_reason:
-                build_problem = f"known-ftbfs {ftbfs_reason}"
-            else:
-                build_problem = "unknown, no build result found"
-            r["build_problem"] = build_problem
+            r["build_problem"] = "no-build-result-found"
 
         results.append(r)
 
@@ -317,7 +273,7 @@ def main():
     today = datetime.datetime.today()
 
     print("Reading bugs")
-    pkg_meta, bugs = get_transformed_bugs()
+    pkg_meta, bugs = get_dep17_bugs()
     print("Reading build logs")
 
     stats = {"total_packages": 0, "groups": {}, "guessed_status": {}}

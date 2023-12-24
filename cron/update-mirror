@@ -4,7 +4,7 @@
 # ftp.acc.umu.se.
 MIRROR_HOST=194.71.11.163
 
-exec debmirror -p -v \
+debmirror -p -v \
     --host=$MIRROR_HOST \
     --rsync-batch=5000 \
     --method=rsync \
@@ -15,3 +15,25 @@ exec debmirror -p -v \
     --diff=none \
     --rsync-extra=trace \
     /srv/debian-mirror/mirror
+
+# fixup by-hash symlinks
+cd /srv/debian-mirror/mirror/dists/unstable
+for component in main non-free non-free-firmware contrib; do
+  for arch in binary-amd64 binary-arm64 binary-all; do
+    mkdir -p $component/$arch/by-hash/SHA256/
+    for packagefile in Packages.xz Packages.gz; do
+      h=$(sha256sum -b $component/$arch/$packagefile | awk '{print $1}')
+      ln -fsr ./$component/$arch/$packagefile $component/$arch/by-hash/SHA256/$h
+    done
+
+  done
+
+  for arch in source; do
+    mkdir -p $component/$arch/by-hash/SHA256/
+    for packagefile in Sources.xz Sources.gz; do
+      h=$(sha256sum -b $component/$arch/$packagefile | awk '{print $1}')
+      ln -fsr ./$component/$arch/$packagefile $component/$arch/by-hash/SHA256/$h
+    done
+
+  done
+done

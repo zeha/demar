@@ -76,9 +76,7 @@ def main():
 
     srcpkgs = [line.strip() for line in args.pkg_list.readlines()]
 
-    known_broken = read_skip_file("known_broken")
     skip_reasons = read_skip_file("skip_reasons")
-    known_broken.update(skip_reasons)
 
     extra_pkgs = []
     for extra_fp in args.extra_changes:
@@ -89,7 +87,7 @@ def main():
     with multiprocessing.Pool(max_parallel) as pool:
         results = pool.map(
             do_build_one,
-            [(srcpkg, str(job_dir), str(build_dir), str(buildlog_dir), extra_pkgs, known_broken) for srcpkg in srcpkgs],
+            [(srcpkg, str(job_dir), str(build_dir), str(buildlog_dir), extra_pkgs, skip_reasons) for srcpkg in srcpkgs],
             1,
         )
 
@@ -98,9 +96,9 @@ def main():
 
 
 def do_build_one(workitem) -> dict:
-    srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken = workitem
+    srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, skip_reasons = workitem
     result = build_one(
-        srcpkg, pathlib.Path(job_dir), pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs, known_broken
+        srcpkg, pathlib.Path(job_dir), pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs, skip_reasons
     )
     return {srcpkg: {"package": srcpkg} | result}
 
@@ -120,7 +118,7 @@ def _create_subprocess_env_block() -> dict:
     return env
 
 
-def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken: dict) -> dict:
+def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, skip_reasons: dict) -> dict:
     build_dir.cwd()
 
     fails = read_fail_file(job_dir)
@@ -143,7 +141,7 @@ def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, known_broken
         print("Skipping", srcpkg, "(buildinfo already exists)")
         return {"status": "already_built"}
 
-    if broken_detail := known_broken.get(srcpkg_name):
+    if broken_detail := skip_reasons.get(srcpkg_name):
         print("Skipping", srcpkg, f"(known broken: {broken_detail})")
         return {"status": "known_broken", "detail": broken_detail}
 

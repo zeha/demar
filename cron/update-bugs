@@ -2,4 +2,4 @@
 set -ex
 cd ~/usrmerge-work
 
-~/demar/update_ftbfs_bugs.py
+~/demar/update_bugs.py

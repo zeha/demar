@@ -22,14 +22,10 @@
 # 
 # m h  dom mon dow   command
 
-3 5,11,17,23 * * * ~/demar/cron/wrap update-mirror 4h
-
-40 5,11,17,23 * * * ~/demar/cron/wrap find-sources-unmerged 300s
-
-55 5,11,17,23 * * * ~/demar/cron/wrap massrebuild 24h
-
 45 5 * * * ~/demar/cron/wrap update-root-not-usr 4h
 
-50,10 * * * * ~/demar/cron/wrap tally 300s
+3 5,11,16,23 * * * ~/demar/cron/wrap update-mirror 4h && ~/demar/cron/wrap update-chroots 300s && ~/demar/cron/wrap find-sources-unmerged 300s && ~/demar/cron/wrap massrebuild 24h
+50,10 6,12,17,23,1 * * * ~/demar/cron/wrap update-bugs 300s && ~/demar/cron/wrap tally 300s
 
+20 7 * * * ~/demar/cron/wrap update-dumat-db 300s
 
