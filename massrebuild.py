@@ -6,9 +6,15 @@ import os
 import pathlib
 import subprocess
 import sys
+import random
+import time
 
 import yaml
 from debian import deb822
+
+
+MAX_REPICK_COUNT = 20  # number of packages to re-pick every run
+MIN_REPICK_DELAY = 3 * 86400  # 3 days ago
 
 
 def get_arch() -> str:
@@ -60,6 +66,40 @@ def read_fail_file(job_dir: pathlib.Path) -> dict[str, str]:
         return {fail[1]: fail[2] for fail in fails}
 
 
+def eval_status(build_dir: pathlib.Path, buildlog_dir: pathlib.Path, skip_reasons, srcpkg: str) -> dict | None:
+    if "_" in srcpkg:
+        srcpkg_name = srcpkg.split("_")[0]
+        srcpkg_version = srcpkg.split("_", 1)[1]
+    else:
+        srcpkg_name = srcpkg
+        srcpkg_version = ""
+
+    binpkg_version = srcpkg_version
+    if ":" in binpkg_version:
+        binpkg_version = binpkg_version.split(":", 1)[1]
+
+    buildinfo_file = build_dir / f"{srcpkg_name}_{binpkg_version}_{MY_ARCHITECTURE}.buildinfo"
+
+    if buildinfo_file.exists():
+        print("Skipping", srcpkg, "buildinfo exists")
+        return {"status": "already_built", "last_attempt": buildinfo_file.stat().st_mtime}
+
+    if broken_detail := skip_reasons.get(srcpkg_name):
+        print("Skipping", srcpkg, f"known broken: {broken_detail}")
+        return {"status": "known_broken", "detail": broken_detail}
+
+    buildlog_file = buildlog_dir / srcpkg
+    if buildlog_file.exists():
+        print("Skipping", srcpkg, "buildlog exists, assuming old ftbfs")
+        return {"status": "old_ftbfs", "last_attempt": buildlog_file.stat().st_mtime}
+
+    return {"status": "needs_build"}
+
+
+def wrap_result(srcpkg: str, result: dict) -> dict:
+    return {srcpkg: {"package": srcpkg} | result}
+
+
 def main():
     args = parse_args()
     job_name = args.job_name
@@ -74,9 +114,29 @@ def main():
     buildlog_dir.mkdir(exist_ok=True)
     print("Writing buildlogs to", buildlog_dir)
 
-    srcpkgs = [line.strip() for line in args.pkg_list.readlines()]
-
     skip_reasons = read_skip_file("skip_reasons")
+
+    srcpkgs = [line.strip() for line in args.pkg_list.readlines()]
+    srcpkg_status = {}
+    for srcpkg in srcpkgs:
+        srcpkg_status[srcpkg] = eval_status(build_dir, buildlog_dir, skip_reasons, srcpkg)
+
+    now = time.time()
+    max_last_attempt = now - MIN_REPICK_DELAY
+    picked = []
+    eligible_repick = []
+    for srcpkg, status in srcpkg_status.items():
+        if status["status"] == "needs_build":
+            picked.append(srcpkg)
+        elif status.get("last_attempt", now) > max_last_attempt:
+            eligible_repick.append(srcpkg)
+
+    count_repick_possible = MAX_REPICK_COUNT - len(picked)
+    if count_repick_possible > 0:
+        random.shuffle(eligible_repick)
+        eligible_repick = eligible_repick[0:count_repick_possible]
+        print("Repicking", " ".join(eligible_repick))
+        picked += eligible_repick
 
     extra_pkgs = []
     for extra_fp in args.extra_changes:
@@ -87,7 +147,7 @@ def main():
     with multiprocessing.Pool(max_parallel) as pool:
         results = pool.map(
             do_build_one,
-            [(srcpkg, str(job_dir), str(build_dir), str(buildlog_dir), extra_pkgs, skip_reasons) for srcpkg in srcpkgs],
+            [(srcpkg, str(build_dir), str(buildlog_dir), extra_pkgs) for srcpkg in picked],
             1,
         )
 
@@ -96,11 +156,9 @@ def main():
 
 
 def do_build_one(workitem) -> dict:
-    srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, skip_reasons = workitem
-    result = build_one(
-        srcpkg, pathlib.Path(job_dir), pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs, skip_reasons
-    )
-    return {srcpkg: {"package": srcpkg} | result}
+    srcpkg, build_dir, buildlog_dir, extra_pkgs = workitem
+    result = build_one(srcpkg, pathlib.Path(build_dir), pathlib.Path(buildlog_dir), extra_pkgs)
+    return wrap_result(srcpkg, result)
 
 
 def _create_subprocess_env_block() -> dict:
@@ -118,32 +176,8 @@ def _create_subprocess_env_block() -> dict:
     return env
 
 
-def build_one(srcpkg, job_dir, build_dir, buildlog_dir, extra_pkgs, skip_reasons: dict) -> dict:
+def build_one(srcpkg: str, build_dir: pathlib.Path, buildlog_dir: pathlib.Path, extra_pkgs) -> dict:
     build_dir.cwd()
-
-    fails = read_fail_file(job_dir)
-    if srcpkg in fails:
-        print("Skipping", srcpkg, "(in fail file)")
-        return {"status": "in_fail_file"}
-
-    if "_" in srcpkg:
-        srcpkg_name = srcpkg.split("_")[0]
-        srcpkg_version = srcpkg.split("_", 1)[1]
-    else:
-        srcpkg_name = srcpkg
-        srcpkg_version = ""
-
-    binpkg_version = srcpkg_version
-    if ":" in binpkg_version:
-        binpkg_version = binpkg_version.split(":", 1)[1]
-
-    if (build_dir / f"{srcpkg_name}_{binpkg_version}_{MY_ARCHITECTURE}.buildinfo").exists():
-        print("Skipping", srcpkg, "(buildinfo already exists)")
-        return {"status": "already_built"}
-
-    if broken_detail := skip_reasons.get(srcpkg_name):
-        print("Skipping", srcpkg, f"(known broken: {broken_detail})")
-        return {"status": "known_broken", "detail": broken_detail}
 
     print(datetime.datetime.now().isoformat(), "Building", srcpkg, "...", f"(worker={os.getpid()})", flush=True)
     args = [
