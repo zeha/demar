@@ -128,7 +128,7 @@ def main():
     for srcpkg, status in srcpkg_status.items():
         if status["status"] == "needs_build":
             picked.append(srcpkg)
-        elif status.get("last_attempt", now) > max_last_attempt:
+        elif status.get("last_attempt", now) < max_last_attempt:
             eligible_repick.append(srcpkg)
 
     count_repick_possible = MAX_REPICK_COUNT - len(picked)
