@@ -164,7 +164,6 @@ def do_build_one(workitem) -> dict:
 def _create_subprocess_env_block() -> dict:
     env = {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "LANG": "en_US.UTF-8",
         "LC_ALL": "C.UTF-8",
         "SHELL": "/bin/sh",
         "USER": os.getenv("USER"),
