@@ -291,7 +291,7 @@ def main():
 
         if build_result["files"]:
             for file in build_result["files"]:
-                if " -> " in file:
+                if " -> " in file or " link to " in file:
                     groups.add("symlink")
 
                 if file.startswith("lib/debian-installer"):
