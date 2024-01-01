@@ -261,6 +261,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--buildlogs-dir", dest="buildlogs_dir", required=True)
     parser.add_argument("--rebuild-list", dest="rebuild_list", required=True)
     parser.add_argument("--output-need-rebuild", dest="output_need_rebuild")
+    parser.add_argument("--output-bootstrap", dest="output_bootstrap")
     return parser.parse_args()
 
 
@@ -270,6 +271,7 @@ def main():
 
     work_todo = {}
     need_rebuild = {}
+    bootstrap = {}
     today = datetime.datetime.today()
 
     print("Reading bugs")
@@ -346,8 +348,10 @@ def main():
 
         if src in ESSENTIAL:
             groups.add("essential")
+            groups.add("bootstrap")
         if src in PSEUDO_ESSENTIAL:
             groups.add("pseudo-essential")
+            groups.add("bootstrap")
 
         pkg_todo["groups"] = list(sorted(list(groups)))
 
@@ -408,6 +412,9 @@ def main():
         else:
             work_todo[src] = pkg_todo
 
+        if "bootstrap" in groups:
+            bootstrap[src] = pkg_todo
+
     meta = {
         "rebuild_timestamp": datetime.datetime.fromtimestamp(Path(args.rebuild_list).stat().st_mtime).isoformat(),
         "last_update": datetime.datetime.now().isoformat(),
@@ -419,6 +426,10 @@ def main():
     if args.output_need_rebuild:
         with Path(args.output_need_rebuild).open("w") as fp:
             yaml.safe_dump_all([need_rebuild], fp)
+
+    if args.output_bootstrap:
+        with Path(args.output_bootstrap).open("w") as fp:
+            yaml.safe_dump_all([bootstrap], fp)
 
 
 if __name__ == "__main__":
