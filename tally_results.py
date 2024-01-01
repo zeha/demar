@@ -183,7 +183,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
         found_files = set()
         count = 0
         in_summary = False
-        built = False  # did sbuild complete (success or failure)
+        built: float | None = None  # did sbuild complete (success or failure)
         build_fail_stage = None
         source_arch = None
         with path.open("rb") as fp:
@@ -196,7 +196,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                 else:
                     if line.startswith(b"| Summary"):
                         in_summary = True
-                        built = True
+                        built = path.stat().st_mtime
                     if source_arch is None and line.startswith(b"Architecture:"):
                         source_arch = line.split(b": ", maxsplit=1)[1].decode().strip().split()
 
@@ -241,7 +241,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
             "version": src_version,
             "source": src_name,
             "files": [],
-            "built": False,
+            "built": None,
         }
 
         skip_reason = skip_reasons.get(src_name)
@@ -372,7 +372,7 @@ def main():
 
         if (
             guessed_status is None
-            and build_result["built"]
+            and build_result["built"] is not None
             and not build_result.get("ftbfs", False)
             and not build_result.get("files", [])
         ):
@@ -404,6 +404,9 @@ def main():
 
         if not build_result["files"]:
             del build_result["files"]
+
+        if build_result["built"] is not None:
+            build_result["built"] = datetime.datetime.fromtimestamp(build_result["built"]).isoformat()
 
         pkg_todo["build_result"] = build_result
 
