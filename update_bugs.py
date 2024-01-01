@@ -35,6 +35,7 @@ join bugs on bugs.id = bugs_usertagged.id
 join sources_uploads on bugs.source = sources_uploads.source
 where
     bugs.id not in (select id from bugs_merged_with where id > merged_with)
+order by 2,1
 """
 
 SQL_FTBFS = """
@@ -50,6 +51,7 @@ and severity in ('serious', 'grave')
 and status <> 'done'
 and (affects_testing or affects_unstable)
 and bugs.id not in (select id from bugs_merged_with where id > merged_with)
+order by 2,1
 """
 
 
