@@ -5,6 +5,3 @@ openvswitch # too big to rebuild
 macaulay2 # too big to rebuild
 pyqt6 # too big to rebuild
 rocblas # too big to rebuild
-munge # too big, assumed to change on rebuild #1058798
-tomcat9 # cruft, NBS
-networking-mlnx # ftbfs and produces 7G buildlog
