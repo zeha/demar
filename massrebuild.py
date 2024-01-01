@@ -194,9 +194,8 @@ def build_one(srcpkg: str, build_dir: pathlib.Path, buildlog_dir: pathlib.Path, 
         args.append(f"--extra-package={extra_pkg}")
 
     buildlog_file = buildlog_dir / srcpkg
-    if buildlog_file.exists():
-        buildlog_file.replace(buildlog_file.parent / f"{buildlog_file.name}.old")
-    with buildlog_file.open("w") as out_fp:
+    new_buildlog_file = buildlog_file.with_name(f"{buildlog_file.name}.new")
+    with new_buildlog_file.open("w") as out_fp:
         proc = subprocess.run(
             args,
             stdout=out_fp,
@@ -212,6 +211,10 @@ def build_one(srcpkg: str, build_dir: pathlib.Path, buildlog_dir: pathlib.Path, 
         print("FAIL", srcpkg, f"(sbuild exited with {proc.returncode})", proc.stderr.decode().strip())
     else:
         result["status"] = "built"
+
+    if buildlog_file.exists():
+        buildlog_file.replace(buildlog_file.with_name(f"{buildlog_file.name}.old"))
+    new_buildlog_file.replace(buildlog_file)
 
     return result
 
