@@ -420,7 +420,6 @@ def main():
 
     meta = {
         "rebuild_timestamp": datetime.datetime.fromtimestamp(Path(args.rebuild_list).stat().st_mtime).isoformat(),
-        "last_update": datetime.datetime.now().isoformat(),
     } | META
 
     with Path(args.output).open("w") as fp:
