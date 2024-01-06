@@ -13,6 +13,7 @@ COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 FINDERS = {
     "udev": lambda path: path.startswith("lib/udev/"),
     "systemd": lambda path: path.startswith("lib/systemd/"),
+    "udevsystemd": lambda path: path.startswith("lib/udev/") or path.startswith("lib/systemd/"),
     "usrmerge": lambda path: path.startswith("lib/") or path.startswith("bin/") or path.startswith("sbin/"),
 }
 
