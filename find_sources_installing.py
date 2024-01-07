@@ -15,6 +15,8 @@ FINDERS = {
     "systemd": lambda path: path.startswith("lib/systemd/"),
     "udevsystemd": lambda path: path.startswith("lib/udev/") or path.startswith("lib/systemd/"),
     "usrmerge": lambda path: path.startswith("lib/") or path.startswith("bin/") or path.startswith("sbin/"),
+    "pam": lambda path: path.startswith("lib/x86_64-linux-gnu/security/")
+    or path.startswith("usr/lib/x86_64-linux-gnu/security/"),
 }
 
 
