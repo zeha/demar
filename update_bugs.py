@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+import httpx
 import psycopg
 import psycopg.rows
 
@@ -54,6 +55,10 @@ and bugs.id not in (select id from bugs_merged_with where id > merged_with)
 order by 2,1
 """
 
+URL_BINARYCONTROL_STATOVERRIDE = (
+    "https://binarycontrol.debian.net/?q=dpkg-statoverride&path=%2Funstable%2F&format=pkglist"
+)
+
 
 def query_udd(sql):
     with psycopg.connect(PG_UDD_URL, row_factory=psycopg.rows.dict_row) as conn:
@@ -61,16 +66,27 @@ def query_udd(sql):
             return cursor.execute(sql).fetchall()
 
 
-def update_cache(filename, sql):
+def query_http(url: str):
+    return (
+        httpx.get(url, headers={"User-Agent": "demar/tally_results (zeha@debian.org)"})
+        .read()
+        .strip()
+        .decode()
+        .splitlines()
+    )
+
+
+def update_cache(filename, callable):
     cache_file = CACHE_DIR / filename
-    result = json.dumps(query_udd(sql))
+    result = json.dumps(callable())
     with cache_file.open("w") as fp:
         fp.write(result)
 
 
 def main():
-    update_cache("bugs-ftbfs", SQL_FTBFS)
-    update_cache("bugs-dep17", SQL_DEP17)
+    update_cache("bugs-ftbfs", lambda: query_udd(SQL_FTBFS))
+    update_cache("bugs-dep17", lambda: query_udd(SQL_DEP17))
+    update_cache("binaries-using-statoverride", lambda: query_http(URL_BINARYCONTROL_STATOVERRIDE))
 
 
 if __name__ == "__main__":

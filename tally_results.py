@@ -98,6 +98,46 @@ DEBOOTSTRAP_VARIANT_ESSENTIAL = {
 }
 PSEUDO_ESSENTIAL = DEBOOTSTRAP_VARIANT_ESSENTIAL - ESSENTIAL - ONE_UPLOAD
 
+SOURCES_WITH_ANY_YET_ALL_RELEVANT = {
+    "acpi-support",
+    "aide",
+    "bluez-qt",
+    "concordance",
+    "daemontools",
+    "debug-me",
+    "game-data-packager",
+    "groonga",
+    "libdjconsole",
+    "libnitrokey",
+    "miniupnpd",
+    "mutter",
+    "nagios4",
+    "nginx",
+    "nyancat",
+    "opendnssec",
+    "resource-agents",
+    "sg3-utils",
+    "steam-installer",
+    "sysrepo",
+    "tinyproxy",
+    "x2gobroker",
+    "yaws",
+}
+
+
+def read_deboostrap_srcs_file(filename: str):
+    file = Path(__file__).parent / filename
+    print("Reading debootstrap srcs file", file)
+    with file.open("r") as fp:
+        packages = [line.split(" ") for line in fp.read().strip().splitlines()]
+        return {parts[1].strip() for parts in packages if len(parts) > 1}
+
+
+def read_binarycontrol_file(filename: str) -> set[str]:
+    file = CACHE_DIR / filename
+    with file.open("r") as fp:
+        return json.load(fp)
+
 
 def read_skip_file(filename: str):
     file = Path(__file__).parent / filename
@@ -181,34 +221,57 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
 
         print("Reading buildlog", path)
         found_files = set()
-        count = 0
-        in_summary = False
+        bin_pkgs = set()
+        count_files = 0
+        section = None
         built: float | None = None  # did sbuild complete (success or failure)
         build_fail_stage = None
         source_arch = None
+        skip_line = False
         with path.open("rb") as fp:
             for line in fp:
-                if in_summary:
-                    if line.startswith(b"Fail-Stage:"):
-                        build_fail_stage = line.split(b" ", maxsplit=1)[1].decode().strip()
-                        continue
-
-                else:
-                    if line.startswith(b"| Summary"):
-                        in_summary = True
+                if skip_line:
+                    skip_line = False
+                    continue
+                line = line.rstrip()
+                if line.startswith(b"+------------------------------------------------------------------------------+"):
+                    section = None
+                if section is None:
+                    if line.startswith(b"| Build"):
+                        section = "build"
+                    elif line.startswith(b"| Update chroot"):
+                        section = "setup"
+                    elif line.startswith(b"| Package contents"):
+                        section = "package_contents"
+                    elif line.startswith(b"| Summary"):
+                        section = "summary"
                         built = path.stat().st_mtime
+                    if section is not None:
+                        skip_line = True
+                    # print("section is now", section, line)
+                    continue
+
+                if section == "build":
                     if source_arch is None and line.startswith(b"Architecture:"):
                         source_arch = line.split(b": ", maxsplit=1)[1].decode().strip().split()
 
-                    if count > 1000:
+                elif section == "package_contents":
+                    if line.startswith(b" Package:"):
+                        bin_pkgs.add(line.split(b" ")[2].decode())
+                    if count_files > 1000:
                         continue
                     if m := re.search(rb"[0-9]:[0-9][0-9] \./(.*)$", line):
                         found_file = m.group(1)
                         if found_file[0:3] not in (b"", b"usr", b"etc", b"var", b"boot"):
                             found_files.add(found_file.decode())
-                            count += 1
-                    if count > 1000:
+                            count_files += 1
+                    if count_files > 1000:
                         found_files.add("MORE_THAN_1000")
+
+                elif section == "summary":
+                    if line.startswith(b"Fail-Stage:"):
+                        build_fail_stage = line.split(b" ", maxsplit=1)[1].decode().strip()
+                        continue
 
         if built:
             seen_pkgs.add(path.name)
@@ -218,6 +281,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
                 "source": src_name,
                 "built": built,
                 "architecture": source_arch,
+                "bin_pkgs": list(sorted(list(bin_pkgs))),
                 "files": list(sorted(list(found_files))),
             }
 
@@ -237,12 +301,7 @@ def get_build_results(rebuild_list: str, buildlogs_dir: str) -> list[dict]:
 
     for pkg in wanted_pkgs - seen_pkgs:
         (src_name, src_version) = pkg.split("_", maxsplit=1)
-        r = {
-            "version": src_version,
-            "source": src_name,
-            "files": [],
-            "built": None,
-        }
+        r = {"version": src_version, "source": src_name, "files": [], "built": None, "binaries": [], "bin_pkgs": []}
 
         skip_reason = skip_reasons.get(src_name)
         if skip_reason:
@@ -278,10 +337,19 @@ def main():
     pkg_meta, bugs = get_dep17_bugs()
     print("Reading build logs")
 
+    # dpkg --root unstable -l > demar/debootstrap-standard
+    # (for x in $( awk '/^ii /{  print $2 }' demar/debootstrap-standard ); do
+    #    chdist unstable apt-cache show $x  | egrep '(Source|Package):';
+    # done | sort | uniq ) > demar/debootstrap-standard-srcs
+    debootstrap_variant_standard = read_deboostrap_srcs_file("debootstrap-standard-srcs")
+
+    bins_using_statoverride = read_binarycontrol_file("binaries-using-statoverride")
+
     stats = {"total_packages": 0, "groups": {}, "guessed_status": {}}
 
     for build_result in get_build_results(args.rebuild_list, args.buildlogs_dir):
         src = build_result["source"]
+        print("Categorizing", src)
         pkg_todo = pkg_meta.get(src, {})
         pkg_todo["bugs"] = bugs.get(src, [])
         del build_result["source"]
@@ -341,12 +409,17 @@ def main():
             if len(groups) == 0:
                 groups.add("UNCATEGORIZED")
 
+        if any(bin_pkg in bins_using_statoverride for bin_pkg in build_result["bin_pkgs"]):
+            groups.add("dpkg-statoverride")
+
         if build_result.get("ftbfs", False):
             groups.add("ftbfs")
         if "ftbfs" in build_result.get("build_problem", ""):
             groups.add("ftbfs")
 
-        if src in ESSENTIAL:
+        if src in debootstrap_variant_standard:
+            groups.add("bootstrap")
+        if src in ESSENTIAL or src in ONE_UPLOAD:
             groups.add("essential")
             groups.add("bootstrap")
         if src in PSEUDO_ESSENTIAL:
@@ -377,7 +450,9 @@ def main():
             and not build_result.get("files", [])
         ):
             just_need_rebuild = True
-            if "all" in build_result["architecture"]:
+            if build_result["architecture"] == ["all"]:
+                guessed_status = "needs-no-change-upload"
+            elif "all" in build_result["architecture"] and src in SOURCES_WITH_ANY_YET_ALL_RELEVANT:
                 guessed_status = "needs-no-change-upload"
             else:
                 guessed_status = "needs-binnmu"
